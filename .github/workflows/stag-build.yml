@@ -1,4 +1,4 @@
-name: Node.js Build
+name: Stag Build
 
 on:
   push:
