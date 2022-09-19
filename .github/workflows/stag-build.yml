@@ -1,0 +1,57 @@
+name: Node.js Build
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  SERVICE_NAME: contour-middleware-test
+  SERVICE_TYPE: be
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        python-version: 3.8.12
+        # See supported Node.js release schedule at https://nodejs.org/en/about/releases/
+
+    steps:
+    - uses: actions/checkout@v3
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Get branch name
+      run: echo "BRANCH_NAME=$(echo ${GITHUB_REF#refs/heads/} | tr /# -)" >> $GITHUB_ENV
+      
+    - name: Login to ECR
+      id: ecr
+      uses: elgohr/ecr-login-action@master
+      with:
+        access_key: ${{ secrets.AWS_ACCESS_KEY }}
+        secret_access_key: ${{ secrets.AWS_SECRET_KEY }}
+        region: ${{ secrets.AWS_REGION }}
+
+    - name: Publish to Registry
+      uses: elgohr/Publish-Docker-Github-Action@master
+      with:
+        name: ${{env.SERVICE_NAME}}-${{env.SERVICE_TYPE}}
+        username: ${{ steps.ecr.outputs.username }}
+        password: ${{ steps.ecr.outputs.password }}
+        registry: ${{ steps.ecr.outputs.registry }}
+        tags: ${{ github.sha }}
+
+    - name: Repository Dispatch
+      uses: peter-evans/repository-dispatch@v1
+      with:
+        token: ${{ secrets.GITOPS_DEPLOY_STAGE_TOKEN }}
+        repository: team-xquare/xquare-gitops-repo-staging
+        event-type: update_image
+        client-payload: '{"ref": "${{ github.ref }}", 
+                          "version": "${{ github.sha }}",
+                          "service_name": "${{env.SERVICE_NAME}}",
+                          "service_type": "${{env.SERVICE_TYPE}}"}'
